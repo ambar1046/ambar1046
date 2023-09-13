@@ -1,0 +1,85 @@
+#include <Servo.h>
+
+Servo binRotationServo;
+Servo lidControlServo;
+
+const int ultrasonicTriggerPin = 2;   // Ultrasonic sensor trigger pin
+const int ultrasonicEchoPin = 3;      // Ultrasonic sensor echo pin
+const int moistureSensorPin = A0;     // Moisture sensor analog pin
+const int inductiveSensorPin = 4;     // Inductive sensor input pin
+
+const int dryBinAngle = 0;            // Angle to position dry waste bin
+const int wetBinAngle = 90;           // Angle to position wet waste bin
+const int metalBinAngle = 180;        // Angle to position metal waste bin
+const int lidOpenAngle = 45;          // Angle to open the lid
+const int lidClosedAngle = 0;         // Angle to close the lid
+
+bool binRotationInProgress = false;
+
+void setup() {
+  binRotationServo.attach(5);         // Attach bin rotation servo to pin 5
+  lidControlServo.attach(6);          // Attach lid control servo to pin 6
+  
+  pinMode(ultrasonicTriggerPin, OUTPUT);
+  pinMode(ultrasonicEchoPin, INPUT);
+  pinMode(inductiveSensorPin, INPUT);
+  
+  binRotationServo.write(dryBinAngle); // Initial position: Dry waste bin
+  delay(1000);                        // Allow time for the servo to move
+  lidControlServo.write(lidClosedAngle); // Close the lid initially
+}
+
+void loop() {
+  // Read distance from ultrasonic sensor
+  int distance = getUltrasonicDistance();
+  
+  // Read moisture level from moisture sensor
+  int moistureLevel = analogRead(moistureSensorPin);
+  
+  // Read inductive sensor state
+  int inductiveState = digitalRead(inductiveSensorPin);
+  
+  if (!binRotationInProgress) {
+    // Determine waste type based on sensor readings and rotate the bin
+    if (distance < 10) { // Adjust the threshold as needed
+      // Metal waste detected
+      rotateBinTo(metalBinAngle);
+    } else if (moistureLevel < 500) { // Adjust the threshold as needed
+      // Wet waste detected
+      rotateBinTo(wetBinAngle);
+    } else if (inductiveState == HIGH) {
+      // Dry waste detected
+      rotateBinTo(dryBinAngle);
+    }
+  } else {
+    // Check if the bin rotation has completed
+    int currentAngle = binRotationServo.read();
+    if (currentAngle == dryBinAngle || currentAngle == wetBinAngle || currentAngle == metalBinAngle) {
+      // Bin rotation is complete, open the lid
+      lidControlServo.write(lidOpenAngle);
+      delay(2000); // Lid open duration (adjust as needed)
+      lidControlServo.write(lidClosedAngle); // Close the lid
+      binRotationInProgress = false;
+    }
+  }
+  
+  delay(1000); // Delay between waste detection cycles (adjust as needed)
+}
+
+int getUltrasonicDistance() {
+  digitalWrite(ultrasonicTriggerPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(ultrasonicTriggerPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(ultrasonicTriggerPin, LOW);
+  return pulseIn(ultrasonicEchoPin, HIGH) / 58; // Convert pulse duration to distance in cm
+}
+
+void rotateBinTo(int targetAngle) {
+  int currentAngle = binRotationServo.read();
+  if (currentAngle != targetAngle) {
+    binRotationServo.write(targetAngle);
+    delay(1000); // Allow time for the servo to move
+    binRotationInProgress = true;
+  }
+}
